@@ -8,8 +8,11 @@ from keyboard import is_pressed, get_hotkey_name
 command = None
 commandTimeout = 0
 commandBlock = False
+rockLoot = ["ironore", "copperore"]
+rockWeight = [3, 1]
 
 # world settings                                                                                                        World settings
+spaceStationRot = 0
 blockSize = 50
 planetRarity = 0.05
 worldSeed = random.random()
@@ -26,6 +29,7 @@ leftHold = False
 leftClick = False
 leftClickPoz0 = [0, 0]
 leftClickPoz1 = [0, 0]
+leftClickPoz2 = [0, 0]
 leftClickBackup = [0, 0]
 mouseLast = [False, False, False]
 lastPoz = [0, 0]
@@ -44,8 +48,14 @@ hyperCharge = True
 hyperRange = 10000
 hyperChargeTiming = 0
 drawSolarSystem = False
-location_data = [0, 0]
+inventoryPressed = 0
+inventoryOpen = False
+inventory = []
+laungAnim = False
+target = [0, 0]
+step = 0
 
+inventorySpace = 15
 hyperRecovery = 300
 launchRange = 300
 
@@ -105,7 +115,7 @@ def draw_background(win):
     for star in background:
         eg.draw_pixel(win, eg.color.white, star[0], star[1])
 def draw_frame(win):
-    global quickSettingsD, poz, target, rot, cicle, drawScene, hyperChargeTiming, hyperCharge, hyperRecovery, launchRange, showRange
+    global quickSettingsD, poz, target, rot, cicle, drawScene, hyperChargeTiming, hyperCharge, hyperRecovery, launchRange, showRange, laungAnim, step, target, spaceStationRot
 
     if drawScene == 0: # draw space
         draw_background(win)
@@ -115,20 +125,35 @@ def draw_frame(win):
                 if local_value > 1 - quickSettingsD[1]:
                     eg.draw_circle(win, float_to_rgb(local_value), localX, localY, int(round(local_value ** 25 * 25, 0)))
                     if str(local_value)[10] == "0":
-                        length, rot_ = int(round(local_seed(localX + globalX, localY + globalY) ** 25 * 25, 0)) + 20, rot + eg.rad_to_deg(local_value)
+                        length, rot_ = int(round(local_seed(localX + globalX, localY + globalY) ** 25 * 25, 0)) + 20, spaceStationRot + eg.rad_to_deg(local_value)
                         eg.draw_image(win, "graphics\\sprites\\spaceStation.png", int(round(math.cos(rot_) * length + localX, 0)), int(round(math.sin(rot_) * length + localY, 0)), scale_to=10, rotate_deg=eg.rad_to_deg(-rot_))
                     if poz == [None, None]:
                         poz = [globalX + localX, globalY + localY]
                 if quickSettingsD[0]:
                     eg.draw_rectangle(win, eg.color.white, int(round(localX, 0)) - int(round(blockSize / 2, 0)), int(round(localY, 0)) - int(round(blockSize / 2, 0)), blockSize, blockSize, draw_offset=(0, 0), border_width=1)
         # draw player
-        rot += 0.005
+        spaceStationRot += 0.005
+        if not laungAnim:
+            rot += 0.005
+        else:
+            rot = math.atan2(target[1] - poz[1], target[0] - poz[0])
         if rot >= math.pi * 2:
             rot -= math.pi * 2
         if rot <= 0:
             rot += math.pi * 2
-        length = int(round(local_seed(poz[0], poz[1]) ** 25 * 25, 0)) + 10
-        eg.draw_image(win, "graphics\\sprites\\player.png", int(round(math.cos(rot) * length + poz[0] - globalX, 0)), int(round(math.sin(rot) * length + poz[1] - globalY, 0)), rotate_deg=eg.rad_to_deg(-rot))
+
+            if is_pressed("f"):
+                laungAnim = False
+        if laungAnim:
+            length = int(round(local_seed(poz[0], poz[1]) ** 25 * 25, 0)) + 10 + math.sqrt((((poz[0] - target[0]) / 250) * step) ** 2 +  (((poz[1] - target[1]) / 250) * step) ** 2)
+            eg.draw_image(win, "graphics\\sprites\\player.png",int(round(math.cos(rot) * length + poz[0] - globalX, 0)),int(round(math.sin(rot) * length + poz[1] - globalY, 0)), rotate_deg=eg.rad_to_deg(-rot) + 90)
+            step += 1
+            if step == 250:
+                laungAnim = False
+                poz = target
+        else:
+            length = int(round(local_seed(poz[0], poz[1]) ** 25 * 25, 0)) + 10
+            eg.draw_image(win, "graphics\\sprites\\player.png", int(round(math.cos(rot) * length + poz[0] - globalX, 0)), int(round(math.sin(rot) * length + poz[1] - globalY, 0)), rotate_deg=eg.rad_to_deg(-rot))
         x, y, color = width - 25, height - 60, [255, 0, 0]
         if showRange:
             eg.draw_circle(window, eg.color.green, poz[0] - globalX, poz[1] - globalY, launchRange, 2)
@@ -145,24 +170,52 @@ def draw_frame(win):
                 else:
                     eg.draw_rectangle(win, eg.color.light_blue, width - 132, height - 35,int(round((time.time() - hyperChargeTiming) * 118 / hyperRecovery, 0)), 20,draw_offset=(0, 0))
                     eg.draw_rectangle(win, eg.color.gray, width - 133, height - 35, 118, 20, 2, draw_offset=(0, 0))
+        if inventoryOpen:
+            x, y = 10, height - 10
+            for n in range(1, inventorySpace + 1):
+                eg.draw_rectangle(win, eg.color.black, x, y, 50, 50, draw_offset=(0, 50))
+                try:
+                    path = "graphics\\inventory\\" + inventory[n - 1] + ".png"
+                    eg.draw_image(win, path, x, y, draw_offset=(0, 50))
+                except:
+                    pass
+                eg.draw_rectangle(win, eg.color.blue, x, y, 50, 50, 2, draw_offset=(0, 50))
+                y -= 60
+                if n % 5 == 0 and n != 0:
+                    x += 60
+                    y = height - 10
+            x, y = 10, height - 60
+            mx, my = eg.get_mouse_poz()
+            for n in range(1, inventorySpace + 1):
+                if x + 50 > mx > x and y + 50 > my > y:
+                    eg.draw_rectangle(win, eg.color.black, mx + 10, my, 100, 25, draw_offset=(0, 0))
+                    try:
+                        eg.draw_text(win, eg.color.white, mx + 12, my, inventory[n - 1], 20)
+                    except:
+                        eg.draw_text(win, eg.color.white, mx + 12, my, "EMPTY", 20)
+                    eg.draw_rectangle(win, eg.color.blue, mx + 10, my, 100, 25, draw_offset=(0, 0), border_width=1)
+                y -= 60
+                if n % 5 == 0 and n != 0:
+                    x += 60
+                    y = height - 60
     elif drawScene == 1:
         draw_background(win)
         eg.draw_rectangle(win, eg.color.black, 50, 50, width - 100, height - 100, draw_offset=(0, 0))
         eg.draw_rectangle(win, eg.color.blue, 50, 50, width - 100, height - 100, 4, draw_offset=(0, 0))
         x, y = 230, int(round(height /2, 0))
-        local_value = local_seed(globalX + location_data[0], globalY + location_data[1])
+        local_value = local_seed(poz[0], poz[1])
         eg.draw_circle(win, float_to_rgb(local_value), 130, y, 50)
         eg.draw_circle(win, float_to_rgb(local_value), 130, y, int(round(local_value ** 25 * 75, 0)))
         if str(local_value)[10] == "0":
             for n in range(int(str(local_value)[4]) - 1):
-                eg.draw_circle(win, float_to_rgb(int(str(local_value)[n + 4]) + int(str(local_value)[n + 5]) + int(str(local_value)[n + 6]), False), x, y,int(str(local_value)[n + 4]) * 2, 0)
+                eg.draw_circle(win, float_to_rgb(int(str(local_value)[n + 5]) + int(str(local_value)[n + 6]) + int(str(local_value)[n + 7]), False), x, y,int(str(local_value)[n + 4]) * 2, 0)
                 path = "graphics\\mask\\planets\\mask" + str(local_value)[n + 4] + ".png"
                 eg.draw_image(win, path, x, y)
                 x += 55
             eg.draw_image(win, "graphics\\sprites\\spaceStation.png", x, y)
         else:
             for n in range(int(str(local_value)[4])):
-                eg.draw_circle(win, float_to_rgb(int(str(local_value)[n + 4]) + int(str(local_value)[n + 5]) + int(str(local_value)[n + 6]), False), x, y,int(str(local_value)[n + 4]) * 2, 0)
+                eg.draw_circle(win, float_to_rgb(int(str(local_value)[n + 5]) + int(str(local_value)[n + 6]) + int(str(local_value)[n + 7]), False), x, y,int(str(local_value)[n + 4]) * 2, 0)
                 path = "graphics\\mask\\planets\\mask" + str(local_value)[n + 4] + ".png"
                 eg.draw_image(win, path, x, y, scale_to=30)
                 x += 55
@@ -174,11 +227,13 @@ def draw_frame(win):
                 color[0] -= 25.5
                 color[1] += 25.55
     elif drawScene == 2:
-        local_value = local_seed(globalX + location_data[0], globalY + location_data[1])
+        local_value = local_seed(poz[0], poz[1])
         n = int(round((leftClickPoz1[0] - 230) / 55, 0))
-        eg.fill(win, float_to_rgb(int(str(local_value)[n + 4]) + int(str(local_value)[n + 5]) + int(str(local_value)[n + 6]), False))
+        eg.fill(win, float_to_rgb(int(str(local_value)[n + 5]) + int(str(local_value)[n + 6]) + int(str(local_value)[n + 7]), False))
         path = "graphics\\mask\\planetary\\mask" + str(local_value)[n + 4] + ".png"
         eg.draw_image(win, path, 0, 0, draw_offset=(0, 0))
+        if str(local_value)[n + 6] == "5" or str(local_value)[n + 6] == "6" or str(local_value)[n + 6] == "7":
+            eg.draw_image(win, "graphics\\sprites\\rock.png", int(str(local_value)[n + 6]) * 83, int(str(local_value)[n + 5]) * 83, draw_offset=(0, 0))
         mx, my = eg.get_mouse_poz()
         if width - 10 > mx > width - 60 and height - 10 > my > height - 60:
             eg.draw_rectangle(win, eg.color.white, width - 60, height - 60, 50, 50, draw_offset=(0, 0))
@@ -272,6 +327,21 @@ def draw_frame(win):
                             eg.draw_text(win, eg.color.white, x + 3, y + 5, "LAND", 20, font="consolas")
                         eg.draw_rectangle(win, eg.color.blue, x, y, 75, 25, draw_offset=(0, 0), border_width=1)
                 y += 25
+        elif drawScene == 2:
+            x, y = leftClickPoz2
+            mx, my = eg.get_mouse_poz()
+            if str(local_value)[n + 6] == "5" or str(local_value)[n + 6] == "6" or str(local_value)[n + 6] == "7":
+                rx, ry = int(str(local_value)[n + 6]) * 83, int(str(local_value)[n + 5]) * 83
+                if rx + 50 > mx > rx and ry + 50 > my > ry:
+                    if x < mx < x + 75 and y < my < y + 25:
+                        eg.draw_rectangle(win, eg.color.white, x, y, 75, 25, draw_offset=(0, 0))
+                        eg.draw_text(win, eg.color.black, x + 3, y + 5, "MINE", 20, font="consolas")
+                    else:
+                        eg.draw_rectangle(win, eg.color.black, x, y, 75, 25, draw_offset=(0, 0))
+                        eg.draw_text(win, eg.color.white, x + 3, y + 5, "MINE", 20, font="consolas")
+                    eg.draw_rectangle(win, eg.color.blue, x, y, 75, 25, draw_offset=(0, 0), border_width=1)
+
+
 
     # draw text
     eg.draw_text(win, (255, 255, 255), 0, 0, f"{globalX} X {globalY}", 15)
@@ -308,7 +378,7 @@ def command_parsing(str):
             meta_ += char
     return meta
 def key_press_handler():
-    global quickSettingsK, command, commandTimeout, commandBlock, globalY, globalX, fuel, hyperCharge
+    global quickSettingsK, command, commandTimeout, commandBlock, globalY, globalX, fuel, hyperCharge, inventoryOpen, inventoryPressed
 
     if is_pressed("`"):
         if time.time() - commandTimeout > 0.5:
@@ -371,6 +441,16 @@ def key_press_handler():
     if is_pressed("esc"):
         print(">>> game was closed with esc")
         quit()
+
+    if is_pressed("i"):
+        if not inventoryPressed:
+            if inventoryOpen:
+                inventoryOpen = False
+            else:
+                inventoryOpen = True
+            inventoryPressed = True
+    else:
+        inventoryPressed = False
 
     x, y = 0, 0
     if command == None:
@@ -435,6 +515,7 @@ while True:
         if eg.get_mouse_click()[0]:  # adding menu buttons
             if leftClick:
                 if drawScene == 0:
+                    leftClick = True
                     x, y = leftClickPoz0
                     if int(round(poz[0] / blockSize, 0)) != int(round((globalX + leftClickPoz0[0]) / blockSize, 0)) or int(round(poz[1] / blockSize, 0)) != int(round((globalY + leftClickPoz0[1]) / blockSize, 0)):
                         if launchRange > math.sqrt((abs(globalX + leftClickPoz0[0] - poz[0]) ** 2) + (abs(globalY + leftClickPoz0[1] - poz[1]) ** 2)):
@@ -442,8 +523,9 @@ while True:
                                 if fuel > 0:
                                     mx, my = eg.get_mouse_poz()
                                     if x < mx < x + 75 and y < my < y + 25:
-                                        poz = [int(round((globalX + leftClickPoz0[0]) / blockSize, 0)) * blockSize,
-                                               int(round((globalY + leftClickPoz0[1]) / blockSize, 0)) * blockSize]
+                                        target = [int(round((globalX + leftClickPoz0[0]) / blockSize, 0)) * blockSize,int(round((globalY + leftClickPoz0[1]) / blockSize, 0)) * blockSize]
+                                        step = 0
+                                        laungAnim = True
                                         leftClick = False
                                         fuel -= 1
                                     y += 25
@@ -485,7 +567,7 @@ while True:
                 elif drawScene == 1:
                     x, y = leftClickPoz1
                     mx, my = eg.get_mouse_poz()
-                    local_value = local_seed(globalX + location_data[0], globalY + location_data[1])
+                    local_value = local_seed(poz[0], poz[1])
                     if (int(str(local_value)[4])) * 55 + 205 > leftClickPoz1[0] > 205 and int(round(height / 2, 0)) + 25 > leftClickPoz1[1] > int(round(height / 2, 0)) - 25:
                         if (int(str(local_value)[4]) - 1) * 55 + 205 > leftClickPoz1[0] > 205 and int(round(height / 2, 0)) + 25 > leftClickPoz1[1] > int(round(height / 2, 0)) - 25:
                             if x < mx < x + 75 and y < my < y + 25:
@@ -505,29 +587,43 @@ while True:
                                         fuel -= 1
                                         leftClick = False
                         y += 25
+                elif drawScene == 2:
+                    n = int(round((leftClickPoz1[0] - 230) / 55, 0))
+                    x, y = leftClickPoz2
+                    mx, my = eg.get_mouse_poz()
+                    if str(local_value)[n + 6] == "5" or str(local_value)[n + 6] == "6" or str(local_value)[n + 6] == "7":
+                        rx, ry = int(str(local_value)[n + 6]) * 83, int(str(local_value)[n + 5]) * 83
+                        if rx + 50 > mx > rx and ry + 50 > my > ry:
+                            if x < mx < x + 75 and y < my < y + 25:
+                                random.seed(time.time())
+                                if len(inventory) < inventorySpace:
+                                    inventory.append(random.choices(rockLoot, rockWeight, k=1)[0])
+                                else:
+                                    print("Not enough space")
 
-                if not leftClick:
+                if leftClick:
                     if drawScene == 0:
-                        location_data = leftClickPoz0
-                    leftClickPoz0 = [0, -100]
-                else:
-                    if drawScene == 0:
-                        location_data = leftClickPoz0
-                    leftClickPoz0 = [0, -100]
-                    leftClickPoz1 = [0, -100]
+                        leftClickPoz0 = [0, -100]
+                    elif drawScene == 1:
+                        leftClickPoz1 = [0, -100]
+                    elif drawScene == 2:
+                        leftClickPoz2 = [0, -100]
 
-        if eg.get_mouse_click()[2]:
-            mx, my = eg.get_mouse_poz()
-            if drawScene == 0:
-                if local_seed(globalX + mx, globalY + my) > 1 - quickSettingsD[1]:
-                    if int(round(globalX + mx / blockSize, 0)) != int(round(globalX + leftClickPoz0[0] / blockSize, 0)) or int(round(globalY + my / blockSize, 0)) != int(round(globalY + leftClickPoz0[1] / blockSize, 0)):
-                        leftClick = True
-                        leftClickPoz0 = [mx, my]
-                        leftClickBackup = [globalX, globalY]
-            elif drawScene == 1:
-                leftClick = True
-                leftClickPoz1 = [mx, my]
-                leftClickBackup = [globalX, globalY]
+        if not laungAnim:
+            if eg.get_mouse_click()[2]:
+                mx, my = eg.get_mouse_poz()
+                if drawScene == 0:
+                    if local_seed(globalX + mx, globalY + my) > 1 - quickSettingsD[1]:
+                            leftClick = True
+                            leftClickPoz0 = [mx, my]
+                            leftClickBackup = [globalX, globalY]
+                elif drawScene == 1:
+                    leftClick = True
+                    leftClickPoz1 = [mx, my]
+                    leftClickBackup = [globalX, globalY]
+                elif drawScene == 2:
+                    leftClick = True
+                    leftClickPoz2 = [mx, my]
 
         if drawScene == 1:
             if eg.get_mouse_click()[0]:
