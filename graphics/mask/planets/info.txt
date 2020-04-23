@@ -1,0 +1,6 @@
+resolution = (30, 30)
+format = PNG
+colors(r, g, b, a) = Black(0, 0, 0, 255), transparent(x, x, x, 0)
+naming = maskN (N = 0 - 9)
+img count = 10
+
